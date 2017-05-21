@@ -1,0 +1,185 @@
+# Leyendo los datos
+esfuerzo<- read.table(file= "https://raw.githubusercontent.com/seospinapo/concreto/master/datos" ,fill=T, header=T)
+esfuerzo
+#Análisis inicial de la base de datos
+summary(esfuerzo)
+#Vectorizando las variables
+material<-esfuerzo[,1]
+tiempo<-esfuerzo[,2]
+muestra<-esfuerzo[,3]
+muestra<-factor(muestra)
+peso<-esfuerzo[,4]
+resistencia<-esfuerzo[,5]
+falla<-esfuerzo[,6]
+levels(material)<-c("convencional", "acero", "polipropileno")
+
+#Calculo de correlación y grafico entre las variables cuantitativas
+cor(tiempo,resistencia)
+cor(tiempo,peso)
+cor(resistencia,peso)
+par(mfrow=c(1,3))
+plot(tiempo, resistencia, cex=0.4, col="red", main= "Correlación=0.9195", xlab="Tiempo (dias)",
+     ylab="Resistencia (MPa)", cex.lab=1.7, cex.axis=1.3, cex.main=1.5, las=1 )
+abline(lm(resistencia ~ tiempo), lwd=1.2, col='brown')
+plot(tiempo, (peso/1000), cex=0.4, col="red", main= "Correlación=0.0626", 
+     xlab="Tiempo (dias)", ylab="Peso (Kg)", cex.lab=1.7, cex.axis=1.3, cex.main=1.5, las=1 )
+abline(lm((peso/1000) ~ tiempo), lwd=1.2, col='brown')
+plot((peso/1000), resistencia, cex=0.4, col="red", main= "Correlación=0.0061", 
+     xlab="Peso (Kg)", ylab="Resistencia (MPa)", cex.lab=1.7, cex.axis=1.3, cex.main=1.5,las=1 )
+abline(lm(resistencia ~ peso), lwd=1.2, col='brown')
+
+#Graficas descriptivas boxplot
+par(mfrow=c(1,2))
+boxplot(resistencia ~ material, xlab="Tipo de material", ylab="Resistencia (MPa)", cex.axis= 1, cex.lab= 1.5, las=1)
+boxplot(resistencia ~ tiempo, xlab="Tiempo (dias)", ylab="Resistencia (MPa)", cex.axis= 1, cex.lab= 1.5, las=1)
+
+
+#Grafico 3D
+require(rgl)
+with(esfuerzo, plot3d(x= tiempo, y= peso, z=resistencia, xlab= "Tiempo (dias)", ylab= "Peso (gr)", zlab="Resistencia (MPa)",col= "red"))
+
+#Prueba de Normalidad
+require(nortest)
+shapiro.test(resistencia)
+
+#Histograma y densidad de la variable respuesta
+par(mfrow=c(1,1))
+hist(resistencia, breaks= 30, xlab= "Resistencia (MPa)", ylab="Frecuencia", cex.axis= 1, cex.lab= 1.5)
+plot(density(resistencia), xlab="Resistencia (MPa)", ylab="Densidad", cex.axis= 1, cex.lab= 1.5, las=1, lwd=2)
+
+interaction.plot(x.factor=tiempo, trace.factor=material, response= resistencia, xlab= "Tiempo (dias)", ylab= "Resistencia (MPa)", cex.axis= 1.5, cex.lab= 1.5, cex=2, las=1)
+
+#Calculo Gamlss
+require(gamlss)
+fitDist(resistencia, k=2, type= "realplus")
+mod1<-fitDist(resistencia,type='realplus',k=log(nrow(esfuerzo)))        
+mod1$fits
+par(mfrow=c(1,3))
+m1<-histDist(resistencia,family=WEI3,nbins=30, xlab= "Resistencia (Mpa)",main= "WEI3")
+m2<-histDist(resistencia,family=GG,nbins=30, xlab= "Resistencia (Mpa)",main= "GG")
+m3<-histDist(resistencia,family=GA,nbins=30, xlab= "Resistencia (Mpa)",main= "GA")
+
+
+# Modelo horizonte
+horizonte<-formula(~peso+material+tiempo+peso*material+peso*tiempo+tiempo*material+
+                     I(peso^2)+I(tiempo^2))
+#Ajuste del modelo inicial con la distribucion WEI3
+WEI30<-gamlss(resistencia~1,sigma.fo=~1,family=WEI3)
+WEI31<-stepGAICAll.A(object=WEI30,trace=F,scope=list(lower=~1,upper=horizonte),
+                        sigma.scope=list(lower=~1,upper=horizonte))
+WEI31<-refit(WEI31)
+#Ajuste del modelo inicial con la distribucion GG
+GG0<-gamlss(resistencia~1,sigma.fo=~1, nu.fo=~1, family=GG)
+GG0<-refit(GG0)
+GG1<-stepGAICAll.A(object=GG0,trace=F,scope=list(lower=~1,upper=horizonte),
+                      sigma.scope=list(lower=~1,upper=horizonte),
+                   nu.scope = list(lower=~1,upper=horizonte))
+GG1<-refit(GG1)
+#Ajuste del modelo inicial con la distribucion GA
+GA0<-gamlss(resistencia~1,sigma.fo=~1, family=GA)
+GA1<-stepGAICAll.A(object=GA0,trace=F,scope=list(lower=~1,upper=horizonte),
+                      sigma.scope=list(lower=~1,upper=horizonte))
+#Ajuste del modelo inicial con la distribucion BCCGo
+BCCGo0<-gamlss(resistencia~1,sigma.fo=~1, nu.fo=~1, family=BCCGo)
+BCCGo1<-stepGAICAll.A(object=BCCGo0,trace=F,scope=list(lower=~1,upper=horizonte),
+                   sigma.scope=list(lower=~1,upper=horizonte),
+                   nu.scope = list(lower=~1,upper=horizonte))
+BCCGo1<-refit(BCCGo1)
+#Ajuste del modelo inicial con la distribucion exGAUS
+exGAUS0<-gamlss(resistencia~1,sigma.fo=~1, nu.fo=~1, family=exGAUS)
+exGAUS1<-stepGAICAll.A(object=exGAUS0,trace=F,scope=list(lower=~1,upper=horizonte),
+                   sigma.scope=list(lower=~1,upper=horizonte),
+                   nu.scope = list(lower=~1,upper=horizonte))
+#Ajuste del modelo inicial con la distribucion GIG
+GIG0<-gamlss(resistencia~1,sigma.fo=~1, nu.fo=~1,family=GIG)
+GIG0<-refit(GIG0)
+GIG1<-stepGAICAll.A(object=GIG0,trace=F,scope=list(lower=~1,upper=horizonte),
+                   sigma.scope=list(lower=~1,upper=horizonte),
+                   nu.scope = list(lower=~1,upper=horizonte))
+#Ajuste del modelo inicial con la distribucion BCTo
+BCTo0<-gamlss(resistencia~1,sigma.fo=~1, nu.fo=~1, tau.fo=~1, family=BCTo)
+BCTo1<-stepGAICAll.A(object=BCTo0,trace=F,scope=list(lower=~1,upper=horizonte),
+                   sigma.scope=list(lower=~1,upper=horizonte),
+                   nu.scope = list(lower=~1,upper=horizonte),
+                   tau.scope = list(lower=~1,upper=horizonte))
+
+#Ajuste del modelo inicial con la distribucion IG
+IG0<-gamlss(resistencia~1,sigma.fo=~1, family=IG)
+IG1<-stepGAICAll.A(object=IG0,trace=F,scope=list(lower=~1,upper=horizonte),
+                   sigma.scope=list(lower=~1,upper=horizonte))
+#Ajuste del modelo inicial con la distribucion LOGNO
+LOGNO0<-gamlss(resistencia~1,sigma.fo=~1, family=LOGNO)
+LOGNO1<-stepGAICAll.A(object=LOGNO0,trace=F,scope=list(lower=~1,upper=horizonte),
+                   sigma.scope=list(lower=~1,upper=horizonte))
+#Ajuste del modelo inicial con la distribucion IGAMMA
+IGAMMA0<-gamlss(resistencia~1,sigma.fo=~1, family=IGAMMA)
+IGAMMA1<-stepGAICAll.A(IGAMMA0,trace=F,scope=list(lower=~1,upper=horizonte),
+                      sigma.scope=list(lower=~1,upper=horizonte))
+IGAMMA1<-refit(IGAMMA1)
+
+#Calculo de Todos
+AIC(WEI31,
+    GG1, GA1, BCCGo1, exGAUS1, GIG1, BCTo1,
+    IG1, LOGNO1, IGAMMA1, k=log(nrow(esfuerzo)))
+
+#Solo los modelos buenos
+AIC(WEI31,
+    GG1, GA1, BCCGo1, exGAUS1, BCTo1,
+    IG1, LOGNO1, IGAMMA1, k=log(nrow(esfuerzo)))
+
+#Actualizando los mejores modelos
+
+BCCGo2<-gamlss( resistencia ~ tiempo+material+tiempo*material+ I(tiempo^2)+I(tiempo^3), 
+                sigma.fo=~material+tiempo+material*tiempo,
+                nu.fo=~tiempo+material+I(tiempo^2), family = BCCGo, 
+                 control=gamlss.control(n.cyc=1000), i.control=glim.control(cyc=50))
+BCCGo3<-gamlss( resistencia ~ tiempo+material+tiempo*material+ I(tiempo^2)*material, 
+                sigma.fo=~material+tiempo+material*tiempo,
+                nu.fo=~tiempo+material+I(tiempo^2)+tiempo*material, family = BCCGo, 
+                control=gamlss.control(n.cyc=600), i.control=glim.control(cyc=50))
+BCTo2<-gamlss( resistencia ~ tiempo+material+ I(tiempo^2)+ tiempo*material,
+               sigma.fo=~tiempo+material+tiempo*material,
+               nu.fo=~tiempo+material,
+               tau.fo=~ tiempo+ I(tiempo^2),
+               family = BCTo,
+                control=gamlss.control(n.cyc=80), i.control=glim.control(cyc=50))
+BCTo3<-gamlss( resistencia ~ tiempo+material+ tiempo*material,
+               sigma.fo=~tiempo+material+I(tiempo^2),
+               nu.fo=~tiempo*material+I(tiempo^2),
+               tau.fo=~ 1,
+               family = BCTo,
+               control=gamlss.control(n.cyc=2000), i.control=glim.control(cyc=50))
+GG2<-gamlss( resistencia ~ tiempo+material+ I(tiempo^2)*material+tiempo*material, 
+             sigma.fo=~material+tiempo+tiempo*material,
+             nu.fo=~tiempo,
+             family = GG,
+                 control=gamlss.control(n.cyc=80), i.control=glim.control(cyc=50))
+GG3<-gamlss( resistencia ~ tiempo+material+ I(tiempo^2)+tiempo*material, 
+             sigma.fo=~material+tiempo+tiempo*material,
+             nu.fo=~tiempo,
+             family = GG,
+             control=gamlss.control(n.cyc=80), i.control=glim.control(cyc=50))
+
+#Calculo para solo los actualizados
+AIC(GG1, BCCGo1, BCTo1,
+    GG2, BCCGo3, BCTo2,
+    GG3, BCCGo2, BCTo3, k=log(nrow(esfuerzo)))
+
+
+
+# Wp para comparar los tres mejores modelos
+par(mfrow=c(1, 3), bg='white')
+wp(BCCGo1)
+title("(BCCGo)")
+wp(BCTo1)
+title("(BCTo)")
+wp(GG2)
+title("(GG)")
+
+# Calculando los SBC
+AIC(BCCGo1, BCTo1, GG2, k=log(nrow(esfuerzo)))
+
+# Mejor modelo
+wp(BCTo1)
+plot(BCTo1)
+summary(BCTo1)
